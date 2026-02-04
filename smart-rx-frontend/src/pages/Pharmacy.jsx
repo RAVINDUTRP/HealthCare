@@ -169,20 +169,6 @@ export default function Pharmacy() {
       }
     }
 
-    let newPrescription = {
-      id: `UP-${Date.now()}`,
-      prescriptionNumber: `RX-UP-${Date.now()}`,
-      status: 'Pending',
-      createdAt: new Date().toISOString(),
-      pharmacyId,
-      pharmacyName: pharmacy?.name || 'Selected Pharmacy',
-      notes: notes || '',
-      imageData,
-      imageFileName,
-      prescriptionSource: 'Uploaded',
-      medications: []
-    };
-
     const token = localStorage.getItem('token');
     if (token) {
       try {
@@ -195,20 +181,13 @@ export default function Pharmacy() {
         }, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
-        if (response?.data) {
-          newPrescription = {
-            ...newPrescription,
-            ...response.data
-          };
+        if (!response?.data) {
+          console.warn('Upload API returned no data');
         }
       } catch (error) {
-        console.warn('Upload API failed, saving locally:', error);
+        console.warn('Upload API failed:', error);
       }
     }
-
-    const stored = JSON.parse(localStorage.getItem('uploadedPrescriptions') || '[]');
-    localStorage.setItem('uploadedPrescriptions', JSON.stringify([newPrescription, ...stored]));
 
     setTimeout(() => {
       setSubmittedTo(null);
