@@ -139,4 +139,22 @@ public class PatientService
         prescription.Id = prescriptionId;
         return prescription;
     }
+
+    public async Task<bool> CancelPrescriptionAsync(string userId, string prescriptionId)
+    {
+        var patient = await _patientRepository.GetByUserIdAsync(userId);
+        if (patient == null)
+            return false;
+
+        Prescription? prescription = null;
+        if (ObjectId.TryParse(prescriptionId, out _))
+            prescription = await _prescriptionRepository.GetByIdAsync(prescriptionId);
+        if (prescription == null || prescription.PatientId != patient.Id)
+            return false;
+
+        if (!string.Equals(prescription.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return await _prescriptionRepository.DeleteAsync(prescription.Id);
+    }
 }

@@ -6,7 +6,7 @@ namespace HealthCarePlus.API.Repositories;
 
 public class PharmacyRepository : BaseRepository<Pharmacy>, IPharmacyRepository
 {
-    public PharmacyRepository(IMongoDatabase database) : base(database, "pharmacy")
+    public PharmacyRepository(IMongoDatabase database) : base(database, "pharmacies")
     {
     }
 

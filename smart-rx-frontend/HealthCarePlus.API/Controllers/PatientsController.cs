@@ -150,4 +150,28 @@ public class PatientsController : ControllerBase
             return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
         }
     }
+
+    [HttpDelete("prescriptions/{id}")]
+    [Authorize]
+    public async Task<IActionResult> CancelPrescription(string id)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User not found");
+
+            var result = await _patientService.CancelPrescriptionAsync(userId, id);
+            if (!result)
+                return BadRequest("Unable to cancel prescription");
+
+            return Ok(new { message = "Prescription cancelled" });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in CancelPrescription: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
+    }
 }

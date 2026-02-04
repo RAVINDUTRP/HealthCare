@@ -22,6 +22,8 @@ const PatientDashboard = () => {
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedNote, setSelectedNote] = useState(null);
 
   const normalizeMedication = (med) => ({
     drugName: med?.drugName || med?.DrugName || med?.name || 'Medication',
@@ -725,7 +727,7 @@ const PatientDashboard = () => {
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
                   <div className="flex items-start gap-6">
                     {/* Icon/Image */}
-                    <div className={`w-24 h-24 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg ${
+                    <div className={`w-24 h-24 rounded-2xl flex items-center justify-center shadow-lg ${
                       rx.status === 'Dispensed' || rx.status === 'Approved'
                         ? 'bg-gradient-to-br from-emerald-100 to-teal-100'
                         : rx.status === 'Pending'
@@ -736,7 +738,7 @@ const PatientDashboard = () => {
                         <img 
                           src={rx.imageData.startsWith('data:') ? rx.imageData : `data:image/jpeg;base64,${rx.imageData}`} 
                           alt="Prescription" 
-                          className="w-full h-full object-cover rounded-2xl"
+                          className="w-full h-full object-cover rounded-2xl hover:scale-110 transition-transform duration-300 cursor-pointer"
                         />
                       ) : (
                         <Pill className={`w-12 h-12 ${
@@ -751,21 +753,29 @@ const PatientDashboard = () => {
                     
                     {/* Content */}
                     <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-3 mb-3">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <h3 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
                           {rx.medications?.length > 0 ? rx.medications[0].drugName : 'Prescription'}
                         </h3>
-                        <span className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all duration-300 ${
-                          rx.status === 'Dispensed'
-                            ? 'bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-300'
-                            : rx.status === 'Approved'
-                            ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border-blue-300'
-                            : rx.status === 'Pending'
-                            ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-300'
-                            : 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border-gray-300'
-                        }`}>
-                          {rx.status}
-                        </span>
+                      </div>
+
+                      {rx.pharmacyName && (
+                        <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium mb-2">
+                          <MapPin className="w-4 h-4" />
+                          <span>{rx.pharmacyName}</span>
+                        </div>
+                      )}
+
+                      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border mb-3 ${
+                        rx.status === 'Dispensed'
+                          ? 'bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-300'
+                          : rx.status === 'Approved'
+                          ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border-blue-300'
+                          : rx.status === 'Pending'
+                          ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-300'
+                          : 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border-gray-300'
+                      }`}>
+                        {rx.status}
                       </div>
                       
                       {/* Dosage & Frequency */}
@@ -777,18 +787,6 @@ const PatientDashboard = () => {
                       
                       {/* Pharmacy & Notes */}
                       <div className="space-y-2 mt-3">
-                        {rx.pharmacyName && (
-                          <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
-                            <MapPin className="w-4 h-4" />
-                            <span>{rx.pharmacyName}</span>
-                          </div>
-                        )}
-                        {rx.notes && (
-                          <div className="flex items-start gap-2 text-sm text-gray-600">
-                            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                            <span className="italic">{rx.notes}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -796,9 +794,42 @@ const PatientDashboard = () => {
                   {/* Action Button */}
                   <div className="flex gap-3 w-full md:w-auto">
                     {rx.status === 'Pending' ? (
-                      <button className="flex-1 md:flex-none bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-emerald-900/30 transition-all duration-300 hover:shadow-xl active:scale-[0.98] active:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
-                        Under Review
-                      </button>
+                      <>
+                        <button className="flex-1 md:flex-none bg-emerald-800 hover:bg-emerald-900 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-emerald-900/30 transition-all duration-300 hover:shadow-xl active:scale-[0.98] active:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
+                          Under Review
+                        </button>
+                        <button onClick={async () => {
+                          if (!window.confirm('Are you sure you want to cancel this prescription?')) {
+                            return;
+                          }
+
+                          const prescriptionId = rx?.id || rx?.Id || rx?.prescriptionId || rx?.PrescriptionId;
+                          const isObjectId = typeof prescriptionId === 'string' && /^[a-f0-9]{24}$/i.test(prescriptionId);
+                          if (!isObjectId) {
+                            alert('Unable to cancel this prescription right now.');
+                            return;
+                          }
+
+                          try {
+                            const token = localStorage.getItem('token');
+                            if (!token) {
+                              alert('Please log in again.');
+                              return;
+                            }
+
+                            await api.delete(`/api/patients/prescriptions/${prescriptionId}`, {
+                              headers: { Authorization: `Bearer ${token}` }
+                            });
+
+                            setPrescriptions((prev) => prev.filter(p => p.id !== rx.id));
+                          } catch (error) {
+                            console.warn('Cancel prescription failed:', error?.message || error);
+                            alert('Unable to cancel this prescription right now.');
+                          }
+                        }} className="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-red-500/30 transition-all duration-300 hover:shadow-xl active:scale-[0.98] active:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
+                          Cancel
+                        </button>
+                      </>
                     ) : rx.status === 'Approved' ? (
                       <button className="flex-1 md:flex-none bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all transform hover:scale-105">
                         View Details
@@ -822,7 +853,7 @@ const PatientDashboard = () => {
                       <FileText className="w-4 h-4 text-blue-500" />
                       Source
                     </p>
-                    <p className="font-bold text-gray-900 truncate text-lg">{rx.prescriptionSource || 'Generated'}</p>
+                    <p className="font-bold text-gray-900 truncate text-base">{rx.prescriptionSource || 'Generated'}</p>
                     <p className="text-xs text-gray-500 font-medium mt-1 truncate">{rx.prescriptionNumber}</p>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-100 to-white border border-emerald-200 shadow-md hover:shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 ease-out">
@@ -830,7 +861,7 @@ const PatientDashboard = () => {
                       <CheckCircle className="w-4 h-4 text-emerald-500" />
                       Status
                     </p>
-                    <p className="font-bold text-gray-900 text-lg">{rx.status}</p>
+                    <p className="font-bold text-gray-900 text-base">{rx.status}</p>
                     <p className="text-xs text-gray-500 font-medium mt-1">Updated</p>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-cyan-100 to-white border border-cyan-200 shadow-md hover:shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 ease-out">
@@ -838,16 +869,25 @@ const PatientDashboard = () => {
                       <Calendar className="w-4 h-4 text-cyan-500" />
                       Uploaded
                     </p>
-                    <p className="font-bold text-gray-900 text-lg">{new Date(rx.createdAt).toLocaleDateString()}</p>
+                    <p className="font-bold text-gray-900 text-base">{new Date(rx.createdAt).toLocaleDateString()}</p>
                     <p className="text-xs text-gray-500 font-medium mt-1">{new Date(rx.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                   </div>
                   <div className="p-4 rounded-xl bg-gradient-to-br from-purple-100 to-white border border-purple-200 shadow-md hover:shadow-xl hover:-translate-y-1 hover:scale-[1.02] transition-all duration-300 ease-out">
                     <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-2 flex items-center gap-2">
-                      <Pill className="w-4 h-4 text-purple-500" />
-                      Medications
+                      <FileText className="w-4 h-4 text-purple-500" />
+                      Notes
                     </p>
-                    <p className="font-bold text-gray-900 text-lg">{rx.medications?.length || 0}</p>
-                    <p className="text-xs text-gray-500 font-medium mt-1">items</p>
+                    {rx.notes ? (
+                      <div className="cursor-pointer" onClick={() => {
+                        setSelectedNote({ note: rx.notes, image: rx.imageData });
+                        setShowNoteModal(true);
+                      }}>
+                        <span className="font-bold text-gray-900 text-base hover:text-purple-600 transition-colors">View Note</span>
+                      </div>
+                    ) : (
+                      <p className="font-bold text-gray-900 text-base">None</p>
+                    )}
+                    <p className="text-xs text-gray-500 font-medium mt-1">from prescription</p>
                   </div>
                 </div>
 
@@ -1254,6 +1294,74 @@ const PatientDashboard = () => {
           <Plus className="w-8 h-8 group-hover:rotate-90 transition-transform duration-300" />
         </button>
       </div>
+
+      {/* Note Modal */}
+      {showNoteModal && selectedNote && (
+        <div className="fixed inset-0 modal-backdrop z-50 flex items-center justify-center p-4 sm:p-6" onClick={() => setShowNoteModal(false)}>
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 border-b border-gray-200 px-8 py-6 bg-gradient-to-r from-purple-50 to-white">
+              <div className="p-3 bg-gradient-to-br from-purple-100 to-purple-50 rounded-xl">
+                <FileText className="w-6 h-6 text-purple-600" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900">Prescription Details</h2>
+                <p className="text-sm text-gray-500 mt-1">View your prescription image and medical notes</p>
+              </div>
+            </div>
+
+            {/* Modal Content - Two Column Layout */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left Side - Prescription Image */}
+              {selectedNote.image && (
+                <div className="w-1/2 bg-gradient-to-b from-blue-50 to-white border-r border-gray-200 p-8 flex flex-col overflow-y-auto">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <FileText className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-800">Prescription Image</h3>
+                  </div>
+                  <div className="bg-white rounded-2xl border-2 border-blue-200 p-6 flex items-center justify-center shadow-xl hover:shadow-2xl transition-shadow flex-1">
+                    <img 
+                      src={selectedNote.image.startsWith('data:') ? selectedNote.image : `data:image/jpeg;base64,${selectedNote.image}`}
+                      alt="Prescription"
+                      className="max-w-full h-auto rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Right Side - Doctor's Note */}
+              {selectedNote.note && (
+                <div className="w-1/2 bg-gradient-to-b from-purple-50 to-white p-8 flex flex-col overflow-y-auto">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-purple-100 rounded-lg">
+                      <FileText className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-800">Doctor's Note</h3>
+                  </div>
+                  <div className="bg-white border-2 border-purple-200 rounded-2xl p-6 shadow-lg flex-1">
+                    <p className="text-gray-800 leading-relaxed text-base whitespace-pre-wrap font-medium">{selectedNote.note}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="border-t border-gray-200 px-8 py-6 bg-gradient-to-r from-white to-gray-50 flex justify-end">
+              <button
+                onClick={() => setShowNoteModal(false)}
+                className="px-8 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-105 shadow-lg shadow-purple-200"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
