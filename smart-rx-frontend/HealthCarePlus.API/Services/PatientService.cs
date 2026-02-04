@@ -9,12 +9,14 @@ public class PatientService
 {
     private readonly IPatientRepository _patientRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IPrescriptionRepository _prescriptionRepository;
     private readonly AvatarService _avatarService;
 
-    public PatientService(IPatientRepository patientRepository, IUserRepository userRepository, AvatarService avatarService)
+    public PatientService(IPatientRepository patientRepository, IUserRepository userRepository, IPrescriptionRepository prescriptionRepository, AvatarService avatarService)
     {
         _patientRepository = patientRepository;
         _userRepository = userRepository;
+        _prescriptionRepository = prescriptionRepository;
         _avatarService = avatarService;
     }
 
@@ -99,5 +101,42 @@ public class PatientService
     public async Task<bool> DeletePatientAsync(string id)
     {
         return await _patientRepository.DeleteAsync(id);
+    }
+
+    public async Task<List<Prescription>> GetPatientPrescriptionsAsync(string userId)
+    {
+        var patient = await _patientRepository.GetByUserIdAsync(userId);
+        if (patient == null)
+            return new List<Prescription>();
+
+        return await _prescriptionRepository.GetByPatientIdAsync(patient.Id);
+    }
+
+    public async Task<Prescription?> UploadPrescriptionAsync(string patientId, string imageData, string fileName, int pharmacyId, string? pharmacyName, string? notes)
+    {
+        // Create a new prescription record from uploaded image
+        var prescription = new Prescription
+        {
+            PatientId = patientId,
+            PrescriptionNumber = $"RX-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid().ToString()[..8].ToUpper()}",
+            ImageData = imageData,
+            ImageFileName = fileName,
+            PharmacyId = pharmacyId,
+            PharmacyName = pharmacyName,
+            Notes = notes,
+            Status = "Pending",
+            PrescriptionSource = "Uploaded",
+            Medications = new List<Medication>(), // Will be filled in after OCR/manual review
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        // Save to MongoDB
+        var prescriptionId = await _prescriptionRepository.CreateAsync(prescription);
+        if (string.IsNullOrEmpty(prescriptionId))
+            return null;
+
+        prescription.Id = prescriptionId;
+        return prescription;
     }
 }

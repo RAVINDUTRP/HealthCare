@@ -3,6 +3,7 @@ import { MapPin, Search, Navigation, Pill, Shield, Users, Heart } from 'lucide-r
 import PharmacyCard from '../components/PharmacyCard';
 import PrescriptionModal from '../components/PrescriptionModal';
 import SuccessToast from '../components/SuccessToast';
+import api from '../api/api';
 import './Pharmacy.css';
 
 export default function Pharmacy() {
@@ -141,14 +142,74 @@ export default function Pharmacy() {
     window.open(`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`, '_blank');
   };
 
-  const handleSubmitPrescription = ({ pharmacyId, file, notes }) => {
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleSubmitPrescription = async ({ pharmacyId, file, notes }) => {
     const pharmacy = pharmacies.find(p => p.id === pharmacyId);
-    setSubmittedTo(pharmacy);
     setShowPrescriptionForm(false);
-    
-    console.log('Prescription submitted:', { pharmacy, file, notes });
-    // Here you would typically send the data to your backend API
-    
+    setSubmittedTo(pharmacy);
+
+    let imageData = '';
+    let imageFileName = '';
+    if (file) {
+      imageFileName = file.name;
+      try {
+        const base64 = await fileToBase64(file);
+        if (typeof base64 === 'string') {
+          const parts = base64.split(',');
+          imageData = parts.length > 1 ? parts[1] : base64;
+        }
+      } catch (error) {
+        console.warn('Failed to read prescription file:', error);
+      }
+    }
+
+    let newPrescription = {
+      id: `UP-${Date.now()}`,
+      prescriptionNumber: `RX-UP-${Date.now()}`,
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
+      pharmacyId,
+      pharmacyName: pharmacy?.name || 'Selected Pharmacy',
+      notes: notes || '',
+      imageData,
+      imageFileName,
+      prescriptionSource: 'Uploaded',
+      medications: []
+    };
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const response = await api.post('/api/patients/prescriptions/upload', {
+          imageData,
+          fileName: imageFileName || 'uploaded-prescription',
+          pharmacyId,
+          pharmacyName: pharmacy?.name || undefined,
+          notes: notes || undefined
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response?.data) {
+          newPrescription = {
+            ...newPrescription,
+            ...response.data
+          };
+        }
+      } catch (error) {
+        console.warn('Upload API failed, saving locally:', error);
+      }
+    }
+
+    const stored = JSON.parse(localStorage.getItem('uploadedPrescriptions') || '[]');
+    localStorage.setItem('uploadedPrescriptions', JSON.stringify([newPrescription, ...stored]));
+
     setTimeout(() => {
       setSubmittedTo(null);
     }, 5000);

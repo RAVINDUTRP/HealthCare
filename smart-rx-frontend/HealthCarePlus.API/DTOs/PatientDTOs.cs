@@ -14,3 +14,12 @@ public class RefillRequestDto
     public string PrescriptionId { get; set; } = null!;
     public string Notes { get; set; } = null!;
 }
+
+public class UploadPrescriptionDto
+{
+    public string ImageData { get; set; } = null!;
+    public string FileName { get; set; } = null!;
+    public int PharmacyId { get; set; }
+    public string? PharmacyName { get; set; }
+    public string? Notes { get; set; }
+}

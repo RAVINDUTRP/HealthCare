@@ -4,7 +4,7 @@ import {
   Heart, Activity, Pill, Calendar, FileText, Bell, Settings, LogOut, 
   UserCircle, Menu, X, Home, Clock, CheckCircle, Package, Phone,
   MapPin, Download, ChevronRight, AlertCircle, TrendingUp, Shield,
-  Search, Filter, MoreVertical, Plus
+  Search, Filter, MoreVertical, Plus, Upload
 } from 'lucide-react';
 import Avatar from '../components/Avatar';
 import api from '../api/api';
@@ -23,6 +23,66 @@ const PatientDashboard = () => {
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
 
+  const readUploadedPrescriptions = () => {
+    try {
+      return JSON.parse(localStorage.getItem('uploadedPrescriptions') || '[]');
+    } catch (error) {
+      console.warn('Failed to parse uploaded prescriptions from storage:', error);
+      return [];
+    }
+  };
+
+  const normalizeMedication = (med) => ({
+    drugName: med?.drugName || med?.DrugName || med?.name || 'Medication',
+    dosage: med?.dosage || med?.Dosage || med?.dose || 'N/A',
+    frequency: med?.frequency || med?.Frequency || 'N/A',
+    instructions: med?.instructions || med?.Instructions || '',
+    quantity: med?.quantity || med?.Quantity || ''
+  });
+
+  const normalizePrescription = (rx) => {
+    const medicationsRaw = Array.isArray(rx?.medications)
+      ? rx.medications
+      : Array.isArray(rx?.Medications)
+      ? rx.Medications
+      : [];
+    const medications = medicationsRaw.map(normalizeMedication);
+    const createdAt = rx?.createdAt || rx?.CreatedAt || new Date().toISOString();
+    const status = rx?.status || rx?.Status || 'Pending';
+    const prescriptionNumber = rx?.prescriptionNumber || rx?.PrescriptionNumber || rx?.id || rx?.Id || '';
+    const id = rx?.id || rx?.Id || rx?.prescriptionId || rx?.PrescriptionId || prescriptionNumber || `RX-${Date.now()}`;
+
+    return {
+      ...rx,
+      id,
+      status,
+      createdAt,
+      prescriptionNumber,
+      prescriptionSource: rx?.prescriptionSource || rx?.PrescriptionSource || 'Uploaded',
+      imageData: rx?.imageData || rx?.ImageData || null,
+      imageFileName: rx?.imageFileName || rx?.ImageFileName || null,
+      pharmacyName: rx?.pharmacyName || rx?.PharmacyName || '',
+      notes: rx?.notes || rx?.Notes || '',
+      medications,
+      medication: rx?.medication || medications[0]?.drugName || 'Prescription',
+      prescribedBy: rx?.prescribedBy || rx?.PrescribedBy || rx?.doctorName || rx?.DoctorName || 'N/A',
+      daysSupplyLeft: rx?.daysSupplyLeft || rx?.DaysSupplyLeft || 0,
+      refillsRemaining: rx?.refillsRemaining || rx?.RefillsRemaining || 0
+    };
+  };
+
+  const mergePrescriptions = (remotePrescriptions = []) => {
+    const localPrescriptions = readUploadedPrescriptions();
+    const normalized = [...localPrescriptions, ...(remotePrescriptions || [])].map(normalizePrescription);
+    const byId = new Map();
+    normalized.forEach((rx) => {
+      if (!byId.has(rx.id)) {
+        byId.set(rx.id, rx);
+      }
+    });
+    return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
@@ -39,10 +99,37 @@ const PatientDashboard = () => {
     }
     
     setUser(parsedUser);
+    setPrescriptions(mergePrescriptions([]));
     loadDashboardData();
     fetchAppointments();
     fetchPrescriptions();
   }, [navigate]);
+
+  const refreshLocalPrescriptions = () => {
+    setPrescriptions((current) => mergePrescriptions(current));
+  };
+
+  // Listen for storage changes (when prescriptions are uploaded in another tab/window)
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (!event || event.key === 'uploadedPrescriptions') {
+        refreshLocalPrescriptions();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshLocalPrescriptions();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const loadDashboardData = async () => {
     setLoadingDashboard(true);
@@ -68,7 +155,7 @@ const PatientDashboard = () => {
         
         // Update prescriptions if we got them from dashboard
         if (data.Prescriptions) {
-          setPrescriptions(data.Prescriptions);
+          setPrescriptions(mergePrescriptions(data.Prescriptions));
         }
       }
     } catch (error) {
@@ -82,7 +169,7 @@ const PatientDashboard = () => {
       setHealthMetrics({
         adherenceRate: 85,
         totalPrescriptions: prescriptions.length,
-        activeMedications: prescriptions.filter(p => p.Status === 'Approved' || p.Status === 'Dispensed').length,
+        activeMedications: prescriptions.filter(p => p.status === 'Approved' || p.status === 'Dispensed').length,
         appointmentsThisMonth: appointments.filter(a => new Date(a.AppointmentDate).getMonth() === new Date().getMonth()).length,
         bloodPressure: '120/80',
         bloodPressureStatus: 'normal',
@@ -102,7 +189,7 @@ const PatientDashboard = () => {
       const token = localStorage.getItem('token');
       if (!token) {
         console.warn('No token found for prescriptions API');
-        setPrescriptions([]);
+        setPrescriptions(mergePrescriptions([]));
         return;
       }
 
@@ -112,11 +199,16 @@ const PatientDashboard = () => {
         }
       };
 
-      const response = await api.get('/api/patients/prescriptions', config);
-      setPrescriptions(response.data || []);
+      try {
+        const response = await api.get('/api/patients/prescriptions', config);
+        setPrescriptions(mergePrescriptions(response.data || []));
+      } catch (apiError) {
+        console.warn('Prescriptions API failed, loading from localStorage:', apiError.message);
+        setPrescriptions(mergePrescriptions([]));
+      }
     } catch (error) {
-      console.warn('Prescriptions API failed (likely expired token):', error.message);
-      setPrescriptions([]);
+      console.warn('Prescriptions fetch failed (likely expired token):', error.message);
+      setPrescriptions(mergePrescriptions([]));
     } finally {
       setLoadingPrescriptions(false);
     }
@@ -183,11 +275,11 @@ const PatientDashboard = () => {
 
   // Today's medication schedule (generated from real prescriptions)
   const todaySchedule = prescriptions.slice(0, 4).map((rx, index) => {
-    const medication = rx.Medications?.[0] || { DrugName: 'No medication', Dosage: 'N/A' };
+    const medication = rx.medications?.[0] || { drugName: 'No medication', dosage: 'N/A' };
     return {
       time: ['8:00 AM', '2:00 PM', '8:00 PM', '9:00 PM'][index] || '8:00 AM',
-      medication: medication.DrugName,
-      dosage: medication.Dosage,
+      medication: medication.drugName,
+      dosage: medication.dosage,
       status: index === 0 ? 'taken' : index === 1 ? 'upcoming' : 'pending',
       takenAt: index === 0 ? '8:15 AM' : undefined
     };
@@ -197,7 +289,7 @@ const PatientDashboard = () => {
   const displayHealthMetrics = healthMetrics || {
     adherenceRate: 0,
     totalPrescriptions: prescriptions.length,
-    activeMedications: prescriptions.filter(p => p.Status === 'Approved' || p.Status === 'Dispensed').length,
+    activeMedications: prescriptions.filter(p => p.status === 'Approved' || p.status === 'Dispensed').length,
     appointmentsThisMonth: appointments.filter(a => new Date(a.AppointmentDate).getMonth() === new Date().getMonth()).length,
     bloodPressure: 'N/A',
     bloodPressureStatus: 'unknown',
@@ -642,72 +734,192 @@ const PatientDashboard = () => {
       </div>
 
       <div className="grid gap-6">
-        {prescriptions.map((rx) => (
-          <div key={rx.id} className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 hover:shadow-xl transition-all duration-300 group">
-            <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
-              <div className="flex items-start gap-6">
-                <div className="w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
-                  <Pill className="w-10 h-10 text-emerald-600" />
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
-                    <h3 className="text-2xl font-bold text-gray-800">{rx.medication}</h3>
-                    {rx.status === 'refill-needed' ? (
-                      <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
-                        Refill Needed
-                      </span>
+        {loadingPrescriptions ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+          </div>
+        ) : prescriptions.length === 0 ? (
+          <div className="text-center py-16 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-3xl border border-emerald-100">
+            <Pill className="w-16 h-16 text-emerald-300 mx-auto mb-4" />
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">No Prescriptions Yet</h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">You haven't uploaded any prescriptions. Visit a pharmacy or ask your doctor to send a prescription.</p>
+            <button 
+              onClick={() => navigate('/pharmacy')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-emerald-200 transition-all inline-flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Prescription
+            </button>
+          </div>
+        ) : (
+          prescriptions.map((rx) => (
+            <div key={rx.id} className="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 group border border-gray-100/50 overflow-hidden">
+              {/* Status Bar */}
+              <div className={`h-2 transition-colors duration-300 ${
+                rx.status === 'Dispensed' 
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                  : rx.status === 'Approved'
+                  ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                  : rx.status === 'Pending'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-500'
+                  : 'bg-gradient-to-r from-gray-400 to-gray-500'
+              }`} />
+              
+              <div className="p-6 md:p-8">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+                  <div className="flex items-start gap-6">
+                    {/* Icon/Image */}
+                    <div className={`w-24 h-24 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg ${
+                      rx.status === 'Dispensed' || rx.status === 'Approved'
+                        ? 'bg-gradient-to-br from-emerald-100 to-teal-100'
+                        : rx.status === 'Pending'
+                        ? 'bg-gradient-to-br from-amber-100 to-orange-100'
+                        : 'bg-gradient-to-br from-blue-100 to-cyan-100'
+                    }`}>
+                      {rx.imageData ? (
+                        <img 
+                          src={`data:image/jpeg;base64,${rx.imageData.substring(0, 100)}`} 
+                          alt="Prescription" 
+                          className="w-full h-full object-cover rounded-2xl"
+                        />
+                      ) : (
+                        <Pill className={`w-12 h-12 ${
+                          rx.status === 'Dispensed' || rx.status === 'Approved'
+                            ? 'text-emerald-600'
+                            : rx.status === 'Pending'
+                            ? 'text-gray-600'
+                            : 'text-blue-600'
+                        }`} />
+                      )}
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-3 mb-3">
+                        <h3 className="text-3xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
+                          {rx.medications?.length > 0 ? rx.medications[0].drugName : 'Prescription'}
+                        </h3>
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all duration-300 ${
+                          rx.status === 'Dispensed'
+                            ? 'bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-300'
+                            : rx.status === 'Approved'
+                            ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border-blue-300'
+                            : rx.status === 'Pending'
+                            ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-300'
+                            : 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border-gray-300'
+                        }`}>
+                          {rx.status}
+                        </span>
+                      </div>
+                      
+                      {/* Dosage & Frequency */}
+                      {rx.medications?.length > 0 && (
+                        <p className="text-lg font-semibold text-gray-700 mb-1">
+                          {rx.medications[0].dosage} • {rx.medications[0].frequency}
+                        </p>
+                      )}
+                      
+                      {/* Pharmacy & Notes */}
+                      <div className="space-y-2 mt-3">
+                        {rx.pharmacyName && (
+                          <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                            <MapPin className="w-4 h-4" />
+                            <span>{rx.pharmacyName}</span>
+                          </div>
+                        )}
+                        {rx.notes && (
+                          <div className="flex items-start gap-2 text-sm text-gray-600">
+                            <FileText className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                            <span className="italic">{rx.notes}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Action Button */}
+                  <div className="flex gap-3 w-full md:w-auto">
+                    {rx.status === 'Pending' ? (
+                      <button className="flex-1 md:flex-none bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-amber-200 transition-all">
+                        Under Review
+                      </button>
+                    ) : rx.status === 'Approved' ? (
+                      <button className="flex-1 md:flex-none bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all transform hover:scale-105">
+                        View Details
+                      </button>
+                    ) : rx.status === 'Dispensed' ? (
+                      <button className="flex-1 md:flex-none bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-emerald-200 transition-all transform hover:scale-105">
+                        View Details
+                      </button>
                     ) : (
-                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
-                        Active
-                      </span>
+                      <button className="flex-1 md:flex-none border-2 border-gray-300 text-gray-700 hover:bg-gray-100 px-8 py-3.5 rounded-2xl font-bold transition-all transform hover:scale-105">
+                        View Details
+                      </button>
                     )}
                   </div>
-                  <p className="text-gray-600 font-medium text-lg">{rx.dosage}</p>
-                  <p className="text-sm text-gray-400 mt-1 font-mono">ID: {rx.id}</p>
                 </div>
-              </div>
-              <div className="flex gap-3 w-full md:w-auto">
-                {rx.status === 'refill-needed' ? (
-                  <button className="flex-1 md:flex-none bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-emerald-200 transition-all transform hover:-translate-y-0.5 hover:shadow-xl">
-                    Request Refill
-                  </button>
-                ) : (
-                  <button className="flex-1 md:flex-none border-2 border-emerald-600 text-emerald-600 hover:bg-emerald-50 px-8 py-3 rounded-xl font-bold transition-all">
-                    Refill Early
-                  </button>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border border-gray-200/50">
+                  <div className="group/item">
+                    <p className="text-xs text-gray-600 uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5 text-blue-500" />
+                      Source
+                    </p>
+                    <p className="font-bold text-gray-800 truncate text-lg">{rx.prescriptionSource || 'Generated'}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1 truncate">{rx.prescriptionNumber}</p>
+                  </div>
+                  <div className="group/item">
+                    <p className="text-xs text-gray-600 uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                      Status
+                    </p>
+                    <p className="font-bold text-gray-800 text-lg">{rx.status}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1">Updated</p>
+                  </div>
+                  <div className="group/item">
+                    <p className="text-xs text-gray-600 uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-cyan-500" />
+                      Uploaded
+                    </p>
+                    <p className="font-bold text-gray-800 text-lg">{new Date(rx.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1">{new Date(rx.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                  </div>
+                  <div className="group/item">
+                    <p className="text-xs text-gray-600 uppercase tracking-wider font-bold mb-2 flex items-center gap-1">
+                      <Pill className="w-3.5 h-3.5 text-purple-500" />
+                      Medications
+                    </p>
+                    <p className="font-bold text-gray-800 text-lg">{rx.medications?.length || 0}</p>
+                    <p className="text-xs text-gray-500 font-medium mt-1">items</p>
+                  </div>
+                </div>
+
+                {/* Medications Included */}
+                {rx.medications && rx.medications.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="font-bold text-gray-800 mb-4">Medications Included:</h4>
+                    <div className="space-y-3">
+                      {rx.medications.map((med, idx) => (
+                        <div key={idx} className="flex items-start justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                          <div>
+                            <p className="font-semibold text-gray-800">{med.drugName}</p>
+                            <p className="text-sm text-gray-600">{med.dosage} • {med.frequency}</p>
+                            {med.instructions && (
+                              <p className="text-sm text-gray-500 mt-1">📋 {med.instructions}</p>
+                            )}
+                          </div>
+                          <span className="bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 px-4 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap border border-emerald-200">Qty: {med.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50 rounded-2xl border border-gray-100">
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1.5">Prescribed By</p>
-                <p className="font-bold text-gray-800">{rx.prescribedBy}</p>
-                <p className="text-xs text-gray-500 font-medium">{rx.specialty}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1.5">Refills</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-[80px]">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(rx.refillsRemaining / rx.refillsTotal) * 100}%` }}></div>
-                  </div>
-                  <span className="font-bold text-gray-800">{rx.refillsRemaining}/{rx.refillsTotal}</span>
-                </div>
-                <p className="text-xs text-gray-500 font-medium mt-1">remaining</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1.5">Supply Left</p>
-                <p className="font-bold text-gray-800">{rx.daysSupplyLeft} days</p>
-                <p className="text-xs text-gray-500 font-medium mt-1">Last filled: {rx.lastFilled}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1.5">Expires</p>
-                <p className="font-bold text-gray-800">{rx.expiryDate}</p>
-                <p className="text-xs text-gray-500 font-medium mt-1">Valid until</p>
-              </div>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

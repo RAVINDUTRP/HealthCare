@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using HealthCarePlus.API.Models;
+using HealthCarePlus.API.DTOs;
 using HealthCarePlus.API.Services;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 
 namespace HealthCarePlus.API.Controllers;
 
@@ -53,5 +56,98 @@ public class PatientsController : ControllerBase
             return NotFound("Patient not found");
 
         return Ok(new { message = "Patient deleted successfully" });
+    }
+
+    [HttpGet("prescriptions")]
+    [Authorize]
+    public async Task<IActionResult> GetPrescriptions()
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User not found");
+
+            var prescriptions = await _patientService.GetPatientPrescriptionsAsync(userId);
+            return Ok(prescriptions);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetPrescriptions: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
+    }
+
+    [HttpGet("dashboard")]
+    [Authorize]
+    public async Task<IActionResult> GetDashboard()
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User not found");
+
+            var patient = await _patientService.GetPatientByUserIdAsync(userId);
+            if (patient == null)
+                return NotFound("Patient not found");
+
+            var prescriptions = await _patientService.GetPatientPrescriptionsAsync(userId);
+
+            return Ok(new
+            {
+                Patient = patient,
+                Prescriptions = prescriptions,
+                HealthMetrics = new
+                {
+                    adherenceRate = 85,
+                    totalPrescriptions = prescriptions.Count,
+                    activeMedications = prescriptions.Count(p => p.Status == "Approved" || p.Status == "Dispensed")
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetDashboard: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
+    }
+
+    [HttpPost("prescriptions/upload")]
+    [Authorize]
+    public async Task<IActionResult> UploadPrescription([FromBody] UploadPrescriptionDto dto)
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("User not found");
+
+            var patient = await _patientService.GetPatientByUserIdAsync(userId);
+            if (patient == null)
+                return NotFound("Patient not found");
+
+            var prescription = await _patientService.UploadPrescriptionAsync(
+                patient.Id,
+                dto.ImageData ?? string.Empty,
+                dto.FileName ?? string.Empty,
+                dto.PharmacyId,
+                dto.PharmacyName,
+                dto.Notes
+            );
+
+            if (prescription == null)
+                return StatusCode(500, "Failed to upload prescription");
+
+            return Ok(prescription);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in UploadPrescription: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
     }
 }
