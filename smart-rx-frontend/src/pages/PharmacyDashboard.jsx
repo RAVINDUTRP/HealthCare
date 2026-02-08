@@ -17,6 +17,8 @@ const PharmacyDashboard = () => {
   const [queuePrescriptions, setQueuePrescriptions] = useState([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [selectedQueueRx, setSelectedQueueRx] = useState(null);
+  const [startFillRx, setStartFillRx] = useState(null);
+  const [fillSuccess, setFillSuccess] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -94,6 +96,41 @@ const PharmacyDashboard = () => {
     if (!user) return;
     fetchQueuePrescriptions();
   }, [user]);
+
+  const notifyPatientReady = (rx) => {
+    try {
+      const stored = localStorage.getItem('notifications');
+      const existing = stored ? JSON.parse(stored) : [];
+      const newNotification = {
+        id: `rx-ready-${Date.now()}`,
+        title: 'Prescription ready',
+        message: `Your prescription ${rx.prescriptionNumber || rx.id} is ready for pickup.`,
+        time: 'Just now',
+        type: 'pharmacy',
+        link: '/patient-dashboard',
+        read: false
+      };
+      const updated = [newNotification, ...existing];
+      localStorage.setItem('notifications', JSON.stringify(updated));
+      window.dispatchEvent(new Event('notificationsUpdate'));
+    } catch (error) {
+      console.error('Failed to update notifications', error);
+    }
+  };
+
+  const handleStartFillConfirm = () => {
+    if (!startFillRx) return;
+    setQueuePrescriptions((prev) => prev.map((rx) => (
+      rx.id === startFillRx.id ? { ...rx, status: 'Ready' } : rx
+    )));
+    notifyPatientReady(startFillRx);
+    setFillSuccess({
+      title: 'Order is ready',
+      message: 'Patient notified that the prescription is ready for pickup.'
+    });
+    setStartFillRx(null);
+    setTimeout(() => setFillSuccess(null), 3500);
+  };
 
   // Pharmacy data
   const pharmacyInfo = {
@@ -610,7 +647,7 @@ const PharmacyDashboard = () => {
         </div>
         <div className="flex items-center gap-3">
           <span className="bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full text-xs font-bold">
-            {queuePrescriptions.length} pending
+            {queuePrescriptions.filter((rx) => rx.status === 'Pending').length} pending
           </span>
           <button
             onClick={fetchQueuePrescriptions}
@@ -652,6 +689,9 @@ const PharmacyDashboard = () => {
                   <div className="flex flex-wrap items-center gap-3 mb-1">
                     <h3 className="font-bold text-gray-800">{rx.prescriptionNumber || rx.id}</h3>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                      rx.status === 'Ready'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        :
                       rx.status === 'Dispensed'
                         ? 'bg-emerald-100 text-emerald-700'
                         : rx.status === 'Approved'
@@ -680,9 +720,20 @@ const PharmacyDashboard = () => {
                 </div>
 
                 <div className="flex gap-2 w-full md:w-auto">
-                  <button className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-200 transition-all">
-                    Start Filling
-                  </button>
+                  {rx.status === 'Ready' ? (
+                    <button
+                      className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-blue-200 transition-all"
+                    >
+                      Deliver Order
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setStartFillRx(rx)}
+                      className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-200 transition-all"
+                    >
+                      Start Filling
+                    </button>
+                  )}
                   <button
                     onClick={() => setSelectedQueueRx(rx)}
                     className="flex-1 md:flex-none bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
@@ -713,7 +764,7 @@ const PharmacyDashboard = () => {
               </div>
               <button
                 onClick={() => setSelectedQueueRx(null)}
-                className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+                className="p-2 rounded-xl text-white hover:bg-white/10 transition-colors"
                 aria-label="Close details"
               >
                 <X className="w-5 h-5" />
@@ -736,6 +787,9 @@ const PharmacyDashboard = () => {
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-3 mb-2">
                     <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+                      selectedQueueRx.status === 'Ready'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        :
                       selectedQueueRx.status === 'Dispensed'
                         ? 'bg-emerald-100 text-emerald-700'
                         : selectedQueueRx.status === 'Approved'
@@ -781,12 +835,112 @@ const PharmacyDashboard = () => {
               <div className="flex items-center justify-end gap-3">
                 <button
                   onClick={() => setSelectedQueueRx(null)}
-                  className="px-5 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-50 transition-colors"
+                  className="px-5 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors"
                 >
                   Close
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {startFillRx && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setStartFillRx(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-gray-100 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-600 to-green-600 text-white">
+              <div>
+                <h3 className="text-lg font-bold">Start Filling</h3>
+                <p className="text-emerald-100 text-sm">{startFillRx.prescriptionNumber || startFillRx.id}</p>
+              </div>
+              <button
+                onClick={() => setStartFillRx(null)}
+                className="p-2 rounded-xl text-white hover:bg-white/10 transition-colors"
+                aria-label="Close start filling"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-emerald-900">Ready to begin</h4>
+                    <p className="text-sm text-emerald-800 mt-1">
+                      Review the prescription and confirm the meds before proceeding.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Summary</h4>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Status</span>
+                    <span className="font-semibold">{startFillRx.status}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Received</span>
+                    <span className="font-semibold">
+                      {new Date(startFillRx.createdAt).toLocaleDateString()} • {new Date(startFillRx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-500">Primary medication</span>
+                    <span className="font-semibold">
+                      {startFillRx.medications.length > 0 ? startFillRx.medications[0].drugName : 'Uploaded prescription'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setStartFillRx(null)}
+                  className="px-5 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleStartFillConfirm}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-lg shadow-emerald-200 transition-all"
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {fillSuccess && (
+        <div className="fixed top-24 right-6 z-50 bg-white rounded-2xl shadow-2xl border border-emerald-100 p-4 max-w-sm">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <CheckCircle className="w-5 h-5 text-emerald-700" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-bold text-gray-800">{fillSuccess.title}</h4>
+              <p className="text-sm text-gray-600 mt-1">{fillSuccess.message}</p>
+            </div>
+            <button
+              onClick={() => setFillSuccess(null)}
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label="Close success message"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
           </div>
         </div>
       )}
