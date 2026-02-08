@@ -7,12 +7,15 @@ import {
   ChevronRight, Shield
 } from 'lucide-react';
 import Avatar from '../components/Avatar';
+import api from '../api/api';
 
 const PharmacyDashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedTab, setSelectedTab] = useState('dashboard');
+  const [queuePrescriptions, setQueuePrescriptions] = useState([]);
+  const [queueLoading, setQueueLoading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -38,6 +41,58 @@ const PharmacyDashboard = () => {
       navigate('/login');
     }
   }, [navigate]);
+
+  const normalizeQueuePrescription = (rx) => {
+    const medicationsRaw = Array.isArray(rx?.medications)
+      ? rx.medications
+      : Array.isArray(rx?.Medications)
+      ? rx.Medications
+      : [];
+
+    const medications = medicationsRaw.map((med) => ({
+      drugName: med?.drugName || med?.DrugName || med?.name || 'Medication',
+      dosage: med?.dosage || med?.Dosage || 'N/A',
+      frequency: med?.frequency || med?.Frequency || 'N/A'
+    }));
+
+    return {
+      id: rx?.id || rx?.Id || rx?.prescriptionId || rx?.PrescriptionId || rx?.prescriptionNumber || rx?.PrescriptionNumber,
+      prescriptionNumber: rx?.prescriptionNumber || rx?.PrescriptionNumber,
+      status: rx?.status || rx?.Status || 'Pending',
+      createdAt: rx?.createdAt || rx?.CreatedAt || new Date().toISOString(),
+      imageData: rx?.imageData || rx?.ImageData || null,
+      notes: rx?.notes || rx?.Notes || '',
+      pharmacyName: rx?.pharmacyName || rx?.PharmacyName || pharmacyInfo.name,
+      medications
+    };
+  };
+
+  const fetchQueuePrescriptions = async () => {
+    setQueueLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setQueuePrescriptions([]);
+        return;
+      }
+
+      const response = await api.get('/api/pharmacists/prescriptions');
+      const list = Array.isArray(response?.data) ? response.data : [];
+      const normalized = list.map(normalizeQueuePrescription)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      setQueuePrescriptions(normalized);
+    } catch (error) {
+      console.warn('Failed to fetch pharmacy prescriptions:', error?.message || error);
+      setQueuePrescriptions([]);
+    } finally {
+      setQueueLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    fetchQueuePrescriptions();
+  }, [user]);
 
   // Pharmacy data
   const pharmacyInfo = {
@@ -545,6 +600,101 @@ const PharmacyDashboard = () => {
     </div>
   );
 
+  const FulfillmentQueueView = () => (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Fulfillment Queue</h2>
+          <p className="text-sm text-gray-500 mt-1">Prescriptions submitted to {pharmacyInfo.name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full text-xs font-bold">
+            {queuePrescriptions.length} pending
+          </span>
+          <button
+            onClick={fetchQueuePrescriptions}
+            className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-200 transition-all"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {queueLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-10 h-10 border-4 border-cyan-200 border-t-cyan-600 rounded-full animate-spin"></div>
+        </div>
+      ) : queuePrescriptions.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-3xl border border-gray-100">
+          <Package className="w-14 h-14 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-gray-700">No prescriptions in queue</h3>
+          <p className="text-sm text-gray-500 mt-2">New uploads will appear here.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {queuePrescriptions.map((rx) => (
+            <div key={rx.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-all">
+              <div className="flex flex-col md:flex-row md:items-center gap-5">
+                <div className="w-20 h-20 rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center">
+                  {rx.imageData ? (
+                    <img
+                      src={rx.imageData.startsWith('data:') ? rx.imageData : `data:image/jpeg;base64,${rx.imageData}`}
+                      alt="Prescription"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Pill className="w-8 h-8 text-cyan-600" />
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-3 mb-1">
+                    <h3 className="font-bold text-gray-800">{rx.prescriptionNumber || rx.id}</h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                      rx.status === 'Dispensed'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : rx.status === 'Approved'
+                        ? 'bg-blue-100 text-blue-700'
+                        : rx.status === 'Pending'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {rx.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 font-medium">
+                    {rx.medications.length > 0 ? rx.medications[0].drugName : 'Uploaded prescription'}
+                  </p>
+                  <div className="flex items-center gap-3 text-xs text-gray-500 mt-2">
+                    <span>{new Date(rx.createdAt).toLocaleDateString()}</span>
+                    <span>•</span>
+                    <span>{new Date(rx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {rx.notes && (
+                      <>
+                        <span>•</span>
+                        <span className="line-clamp-1">{rx.notes}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                  <button className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-200 transition-all">
+                    Start Filling
+                  </button>
+                  <button className="flex-1 md:flex-none border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    Details
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // Ready for Pickup View
   const ReadyForPickupView = () => (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -952,7 +1102,7 @@ const PharmacyDashboard = () => {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
           {selectedTab === 'dashboard' && <DashboardView />}
-          {selectedTab === 'queue' && <DashboardView />}
+          {selectedTab === 'queue' && <FulfillmentQueueView />}
           {selectedTab === 'pickup' && <ReadyForPickupView />}
           {selectedTab === 'inventory' && <InventoryView />}
           {selectedTab === 'revenue' && <RevenueReportsView />}

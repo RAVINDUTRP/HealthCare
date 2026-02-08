@@ -225,4 +225,30 @@ public class PharmacistsController : ControllerBase
             return BadRequest(new { message = "Error retrieving pharmacies by city", error = ex.Message });
         }
     }
+
+    // Get prescriptions submitted to the current pharmacy
+    [HttpGet("prescriptions")]
+    public async Task<IActionResult> GetPharmacyPrescriptions()
+    {
+        try
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var pharmacy = await _pharmacyService.GetPharmacyByUserIdAsync(userId);
+            if (pharmacy == null)
+                return NotFound("Pharmacy profile not found");
+
+            var collection = _database.GetCollection<Prescription>("prescriptions");
+            var filter = Builders<Prescription>.Filter.Eq(p => p.PharmacyName, pharmacy.PharmacyName);
+            var prescriptions = await collection.Find(filter).SortByDescending(p => p.CreatedAt).ToListAsync();
+
+            return Ok(prescriptions);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = "Error retrieving prescriptions", error = ex.Message });
+        }
+    }
 }
