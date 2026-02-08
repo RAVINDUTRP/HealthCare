@@ -16,7 +16,7 @@ export default function Pharmacy() {
   const [scrollY, setScrollY] = useState(0);
   const [revealedElements, setRevealedElements] = useState(new Set());
 
-  const pharmacies = [
+  const fallbackPharmacies = [
     {
       id: 1,
       name: 'Healthguard Pharmacy',
@@ -75,6 +75,38 @@ export default function Pharmacy() {
     }
   ];
 
+  const [pharmacies, setPharmacies] = useState(fallbackPharmacies);
+
+  const normalizePharmacy = (pharmacy, index) => {
+    const name = pharmacy?.pharmacyName || pharmacy?.PharmacyName || pharmacy?.name || 'Pharmacy';
+    const addressParts = [
+      pharmacy?.address || pharmacy?.Address,
+      pharmacy?.city || pharmacy?.City,
+      pharmacy?.state || pharmacy?.State,
+      pharmacy?.zipCode || pharmacy?.ZipCode
+    ].filter(Boolean);
+    const services = Array.isArray(pharmacy?.services || pharmacy?.Services)
+      ? (pharmacy?.services || pharmacy?.Services)
+      : (pharmacy?.offersDelivery || pharmacy?.OffersDelivery)
+        ? ['Home Delivery']
+        : [];
+
+    return {
+      id: pharmacy?.id || pharmacy?._id || pharmacy?.Id || pharmacy?.pharmacyId || pharmacy?.PharmacyId || `pharmacy-${index}`,
+      name,
+      address: addressParts.join(', ') || 'Address not provided',
+      phone: pharmacy?.phone || pharmacy?.Phone || 'N/A',
+      rating: typeof pharmacy?.rating === 'number' ? pharmacy.rating : 4.5,
+      reviews: typeof pharmacy?.reviews === 'number' ? pharmacy.reviews : 0,
+      openNow: pharmacy?.isActive ?? pharmacy?.IsActive ?? true,
+      hours: pharmacy?.operatingHours || pharmacy?.OperatingHours || ((pharmacy?.isOpen24Hours || pharmacy?.IsOpen24Hours) ? 'Open 24/7' : 'Hours not available'),
+      distance: pharmacy?.distance || pharmacy?.Distance || '',
+      services,
+      image: pharmacy?.profileImageUrl || pharmacy?.ProfileImageUrl || pharmacy?.image || 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&q=80',
+      location: pharmacy?.location || null
+    };
+  };
+
   // Scroll event listener for animations
   useEffect(() => {
     const handleScroll = () => {
@@ -102,6 +134,36 @@ export default function Pharmacy() {
     
     return () => window.removeEventListener('scroll', handleScroll);
   }, [revealedElements]);
+
+  useEffect(() => {
+    const fetchPharmacies = async () => {
+      try {
+        const response = await api.get('/api/pharmacists');
+        const list = Array.isArray(response?.data) ? response.data : [];
+        if (list.length > 0) {
+          setPharmacies(list.map((item, index) => normalizePharmacy(item, index)));
+          return;
+        }
+      } catch (error) {
+        console.warn('Pharmacies API failed, trying active list:', error?.message || error);
+      }
+
+      try {
+        const response = await api.get('/api/pharmacists/active');
+        const list = Array.isArray(response?.data) ? response.data : [];
+        if (list.length > 0) {
+          setPharmacies(list.map((item, index) => normalizePharmacy(item, index)));
+          return;
+        }
+      } catch (error) {
+        console.warn('Active pharmacies API failed, using fallback list:', error?.message || error);
+      }
+
+      setPharmacies(fallbackPharmacies);
+    };
+
+    fetchPharmacies();
+  }, []);
 
   const handleUseLocation = () => {
     if (!navigator.geolocation) {

@@ -105,6 +105,7 @@ public class PharmacistsController : ControllerBase
 
     // Get active pharmacies
     [HttpGet("active")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetActivePharmacies()
     {
         try

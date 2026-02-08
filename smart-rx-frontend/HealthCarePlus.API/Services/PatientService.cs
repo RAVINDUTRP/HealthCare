@@ -112,7 +112,7 @@ public class PatientService
         return await _prescriptionRepository.GetByPatientIdAsync(patient.Id);
     }
 
-    public async Task<Prescription?> UploadPrescriptionAsync(string patientId, string imageData, string fileName, int pharmacyId, string? pharmacyName, string? notes)
+    public async Task<Prescription?> UploadPrescriptionAsync(string patientId, string imageData, string fileName, int? pharmacyId, string? pharmacyName, string? notes)
     {
         // Create a new prescription record from uploaded image
         var prescription = new Prescription

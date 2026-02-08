@@ -133,7 +133,7 @@ public class PatientsController : ControllerBase
                 patient.Id,
                 dto.ImageData ?? string.Empty,
                 dto.FileName ?? string.Empty,
-                dto.PharmacyId,
+                int.TryParse(dto.PharmacyId, out var pharmacyIdParsed) ? pharmacyIdParsed : null,
                 dto.PharmacyName,
                 dto.Notes
             );
