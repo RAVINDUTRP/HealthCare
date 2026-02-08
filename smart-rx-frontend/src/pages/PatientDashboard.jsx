@@ -33,7 +33,28 @@ const PatientDashboard = () => {
     quantity: med?.quantity || med?.Quantity || ''
   });
 
-  const normalizePrescription = (rx) => {
+  const extractRxId = (text = '') => {
+    const match = text.match(/RX-[A-Za-z0-9-]+/);
+    return match ? match[0] : null;
+  };
+
+  const getReadyPrescriptionIds = () => {
+    try {
+      const stored = localStorage.getItem('notifications');
+      const notifications = stored ? JSON.parse(stored) : [];
+      return new Set(
+        notifications
+          .filter((n) => /prescription ready/i.test(n?.title || '') || /ready for pickup/i.test(n?.message || ''))
+          .map((n) => extractRxId(`${n?.title || ''} ${n?.message || ''}`))
+          .filter(Boolean)
+      );
+    } catch (error) {
+      console.error('Failed to read notifications for ready status', error);
+      return new Set();
+    }
+  };
+
+  const normalizePrescription = (rx, readyIds = new Set()) => {
     const medicationsRaw = Array.isArray(rx?.medications)
       ? rx.medications
       : Array.isArray(rx?.Medications)
@@ -48,7 +69,7 @@ const PatientDashboard = () => {
     return {
       ...rx,
       id,
-      status,
+      status: readyIds.has(prescriptionNumber) || readyIds.has(id) ? 'Ready' : status,
       createdAt,
       prescriptionNumber,
       prescriptionSource: rx?.prescriptionSource || rx?.PrescriptionSource || 'Uploaded',
@@ -64,8 +85,11 @@ const PatientDashboard = () => {
     };
   };
 
-  const normalizePrescriptions = (list = []) =>
-    (list || []).map(normalizePrescription).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const normalizePrescriptions = (list = []) => {
+    const readyIds = getReadyPrescriptionIds();
+    return (list || []).map((rx) => normalizePrescription(rx, readyIds))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -87,6 +111,35 @@ const PatientDashboard = () => {
     fetchAppointments();
     fetchPrescriptions();
   }, [navigate]);
+
+  useEffect(() => {
+    const applyReadyStatusFromNotifications = () => {
+      const readyIds = getReadyPrescriptionIds();
+      if (readyIds.size === 0) return;
+      setPrescriptions((prev) => prev.map((rx) => (
+        readyIds.has(rx.prescriptionNumber) || readyIds.has(rx.id)
+          ? { ...rx, status: 'Ready' }
+          : rx
+      )));
+    };
+
+    applyReadyStatusFromNotifications();
+
+    const handleNotificationsUpdate = () => applyReadyStatusFromNotifications();
+    const handleStorage = (event) => {
+      if (event.key === 'notifications') {
+        applyReadyStatusFromNotifications();
+      }
+    };
+
+    window.addEventListener('notificationsUpdate', handleNotificationsUpdate);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      window.removeEventListener('notificationsUpdate', handleNotificationsUpdate);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   const loadDashboardData = async () => {
     setLoadingDashboard(true);
@@ -715,6 +768,8 @@ const PatientDashboard = () => {
               <div className={`h-2 transition-colors duration-300 ${
                 rx.status === 'Dispensed' 
                   ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                  : rx.status === 'Ready'
+                  ? 'bg-gradient-to-r from-emerald-500 to-green-500'
                   : rx.status === 'Approved'
                   ? 'bg-gradient-to-r from-blue-500 to-cyan-500'
                   : rx.status === 'Pending'
@@ -730,6 +785,8 @@ const PatientDashboard = () => {
                     <div className={`w-24 h-24 rounded-2xl flex items-center justify-center shadow-lg ${
                       rx.status === 'Dispensed' || rx.status === 'Approved'
                         ? 'bg-gradient-to-br from-emerald-100 to-teal-100'
+                        : rx.status === 'Ready'
+                        ? 'bg-gradient-to-br from-emerald-100 to-green-100'
                         : rx.status === 'Pending'
                         ? 'bg-gradient-to-br from-amber-100 to-orange-100'
                         : 'bg-gradient-to-br from-blue-100 to-cyan-100'
@@ -743,6 +800,8 @@ const PatientDashboard = () => {
                       ) : (
                         <Pill className={`w-12 h-12 ${
                           rx.status === 'Dispensed' || rx.status === 'Approved'
+                            ? 'text-emerald-600'
+                            : rx.status === 'Ready'
                             ? 'text-emerald-600'
                             : rx.status === 'Pending'
                             ? 'text-gray-600'
@@ -769,6 +828,8 @@ const PatientDashboard = () => {
                       <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border mb-3 ${
                         rx.status === 'Dispensed'
                           ? 'bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border-emerald-300'
+                          : rx.status === 'Ready'
+                          ? 'bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-700 border-emerald-300'
                           : rx.status === 'Approved'
                           ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border-blue-300'
                           : rx.status === 'Pending'
@@ -830,6 +891,10 @@ const PatientDashboard = () => {
                           Cancel
                         </button>
                       </>
+                    ) : rx.status === 'Ready' ? (
+                      <button className="flex-1 md:flex-none bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-emerald-200 transition-all transform hover:scale-105">
+                        Ready for Pickup
+                      </button>
                     ) : rx.status === 'Approved' ? (
                       <button className="flex-1 md:flex-none bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all transform hover:scale-105">
                         View Details
