@@ -16,6 +16,7 @@ const PharmacyDashboard = () => {
   const [selectedTab, setSelectedTab] = useState('dashboard');
   const [queuePrescriptions, setQueuePrescriptions] = useState([]);
   const [queueLoading, setQueueLoading] = useState(false);
+  const [selectedQueueRx, setSelectedQueueRx] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -682,7 +683,10 @@ const PharmacyDashboard = () => {
                   <button className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-200 transition-all">
                     Start Filling
                   </button>
-                  <button className="flex-1 md:flex-none border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setSelectedQueueRx(rx)}
+                    className="flex-1 md:flex-none bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  >
                     <Eye className="w-4 h-4" />
                     Details
                   </button>
@@ -690,6 +694,100 @@ const PharmacyDashboard = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {selectedQueueRx && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSelectedQueueRx(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-gray-100 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
+              <div>
+                <h3 className="text-lg font-bold">Prescription Details</h3>
+                <p className="text-cyan-100 text-sm">{selectedQueueRx.prescriptionNumber || selectedQueueRx.id}</p>
+              </div>
+              <button
+                onClick={() => setSelectedQueueRx(null)}
+                className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+                aria-label="Close details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row gap-5">
+                <div className="w-28 h-28 rounded-2xl bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center">
+                  {selectedQueueRx.imageData ? (
+                    <img
+                      src={selectedQueueRx.imageData.startsWith('data:') ? selectedQueueRx.imageData : `data:image/jpeg;base64,${selectedQueueRx.imageData}`}
+                      alt="Prescription"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Pill className="w-10 h-10 text-cyan-600" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wide ${
+                      selectedQueueRx.status === 'Dispensed'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : selectedQueueRx.status === 'Approved'
+                        ? 'bg-blue-100 text-blue-700'
+                        : selectedQueueRx.status === 'Pending'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {selectedQueueRx.status}
+                    </span>
+                    <span className="text-xs text-gray-500 font-medium">
+                      {new Date(selectedQueueRx.createdAt).toLocaleDateString()} • {new Date(selectedQueueRx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 font-medium">
+                    {selectedQueueRx.medications.length > 0 ? selectedQueueRx.medications[0].drugName : 'Uploaded prescription'}
+                  </p>
+                  {selectedQueueRx.notes && (
+                    <p className="text-sm text-gray-500 mt-2">Notes: {selectedQueueRx.notes}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Medications</h4>
+                {selectedQueueRx.medications.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedQueueRx.medications.map((med, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm text-gray-700">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-500"></div>
+                          <span className="font-medium">{med.drugName}</span>
+                        </div>
+                        <span className="text-gray-500">{med.dosage} • {med.frequency}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Medication details not provided.</p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setSelectedQueueRx(null)}
+                  className="px-5 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm font-bold hover:bg-gray-50 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
