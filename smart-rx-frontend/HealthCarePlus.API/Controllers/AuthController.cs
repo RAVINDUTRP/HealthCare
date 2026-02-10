@@ -3,6 +3,10 @@ using BCrypt.Net;
 using HealthCarePlus.API.DTOs;
 using HealthCarePlus.API.Models;
 using HealthCarePlus.API.Services;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Net.Http;
 
 namespace HealthCarePlus.API.Controllers;
 
@@ -80,6 +84,24 @@ public class AuthController : ControllerBase
 
         var token = _jwtService.GenerateToken(user.Username, user.Role, user.Id);
         return Ok(new AuthResponse(token, user.Username, user.Role, user.AvatarColor, user.AvatarEmoji, user.ProfileImageUrl));
+    }
+
+    [HttpPost("login-google")]
+    public async Task<IActionResult> LoginGoogle([FromBody] SocialLoginDto dto)
+    {
+        return await HandleSocialLoginAsync("Google", dto);
+    }
+
+    [HttpPost("login-facebook")]
+    public async Task<IActionResult> LoginFacebook([FromBody] SocialLoginDto dto)
+    {
+        return await HandleSocialLoginAsync("Facebook", dto);
+    }
+
+    [HttpPost("login-apple")]
+    public async Task<IActionResult> LoginApple([FromBody] SocialLoginDto dto)
+    {
+        return await HandleSocialLoginAsync("Apple", dto);
     }
 
     // Doctor-specific registration
@@ -348,5 +370,189 @@ public class AuthController : ControllerBase
         await _userService.UpdateAsync(user.Id!, user);
 
         return Ok(new { message = "Password has been reset successfully" });
+    }
+
+    private async Task<IActionResult> HandleSocialLoginAsync(string provider, SocialLoginDto dto)
+    {
+        if (dto == null)
+            return BadRequest("Email is required");
+
+        var email = dto.Email;
+        var fullName = dto.FullName;
+        var providerId = dto.ProviderId;
+        var avatarUrl = dto.AvatarUrl;
+
+        if (string.IsNullOrWhiteSpace(email) && !string.IsNullOrWhiteSpace(dto.IdToken))
+        {
+            if (TryParseIdToken(dto.IdToken, out var tokenEmail, out var tokenName, out var tokenAvatar, out var tokenProviderId))
+            {
+                email = tokenEmail ?? email;
+                fullName = tokenName ?? fullName;
+                avatarUrl = tokenAvatar ?? avatarUrl;
+                providerId = tokenProviderId ?? providerId;
+            }
+            else if (provider == "Google")
+            {
+                var tokenInfo = await FetchGoogleTokenInfoAsync(dto.IdToken);
+                if (tokenInfo != null)
+                {
+                    email ??= tokenInfo.Value.Email;
+                    fullName ??= tokenInfo.Value.FullName;
+                    avatarUrl ??= tokenInfo.Value.AvatarUrl;
+                    providerId ??= tokenInfo.Value.ProviderId;
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+            return BadRequest("Email is required");
+
+        var user = await _userService.GetByEmailAsync(email);
+
+        if (user == null)
+        {
+            var baseUsername = email.Split('@')[0];
+            var username = await EnsureUniqueUsernameAsync(baseUsername);
+            var (color, emoji) = _avatarService.GenerateAvatar(username);
+            var resolvedAvatarUrl = string.IsNullOrWhiteSpace(avatarUrl)
+                ? _avatarService.GenerateAvatarUrl(color, emoji)
+                : avatarUrl;
+            var (firstName, lastName) = ParseName(fullName, username);
+
+            user = new User
+            {
+                Username = username,
+                Email = email,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(Guid.NewGuid().ToString("N")),
+                Role = "Patient",
+                FirstName = firstName,
+                LastName = lastName,
+                AvatarColor = color,
+                AvatarEmoji = emoji,
+                ProfileImageUrl = resolvedAvatarUrl,
+                OAuthProvider = provider,
+                OAuthProviderId = providerId,
+                LastLoginAt = DateTime.UtcNow
+            };
+
+            var userId = await _userService.CreateAsync(user);
+            if (userId == null)
+                return BadRequest("Failed to create user");
+        }
+        else
+        {
+            user.LastLoginAt = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(user.OAuthProvider))
+                user.OAuthProvider = provider;
+            if (!string.IsNullOrWhiteSpace(providerId) && string.IsNullOrWhiteSpace(user.OAuthProviderId))
+                user.OAuthProviderId = providerId;
+
+            await _userService.UpdateAsync(user.Id!, user);
+        }
+
+        var token = _jwtService.GenerateToken(user.Username, user.Role, user.Id);
+        return Ok(new AuthResponse(token, user.Username, user.Role, user.AvatarColor, user.AvatarEmoji, user.ProfileImageUrl));
+    }
+
+    private async Task<string> EnsureUniqueUsernameAsync(string baseUsername)
+    {
+        var candidate = string.IsNullOrWhiteSpace(baseUsername) ? "user" : baseUsername;
+        var existing = await _userService.GetByUsernameAsync(candidate);
+        if (existing == null) return candidate;
+
+        var suffix = 1;
+        while (await _userService.GetByUsernameAsync($"{candidate}{suffix}") != null)
+        {
+            suffix++;
+        }
+
+        return $"{candidate}{suffix}";
+    }
+
+    private static (string FirstName, string LastName) ParseName(string? fullName, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+            return (fallback, "");
+
+        var parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return (fallback, "");
+        if (parts.Length == 1) return (parts[0], "");
+
+        return (parts[0], string.Join(' ', parts.Skip(1)));
+    }
+
+    private static bool TryParseIdToken(string idToken, out string? email, out string? fullName, out string? avatarUrl, out string? providerId)
+    {
+        email = null;
+        fullName = null;
+        avatarUrl = null;
+        providerId = null;
+
+        try
+        {
+            var parts = idToken.Split('.');
+            if (parts.Length < 2) return false;
+
+            var payloadJson = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
+            using var doc = JsonDocument.Parse(payloadJson);
+
+            if (doc.RootElement.TryGetProperty("email", out var emailProp))
+                email = emailProp.GetString();
+            if (doc.RootElement.TryGetProperty("name", out var nameProp))
+                fullName = nameProp.GetString();
+            if (doc.RootElement.TryGetProperty("picture", out var pictureProp))
+                avatarUrl = pictureProp.GetString();
+            if (doc.RootElement.TryGetProperty("sub", out var subProp))
+                providerId = subProp.GetString();
+
+            return !string.IsNullOrWhiteSpace(email);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static byte[] Base64UrlDecode(string input)
+    {
+        var padded = input.Replace('-', '+').Replace('_', '/');
+        switch (padded.Length % 4)
+        {
+            case 2:
+                padded += "==";
+                break;
+            case 3:
+                padded += "=";
+                break;
+        }
+
+        return Convert.FromBase64String(padded);
+    }
+
+    private static async Task<(string? Email, string? FullName, string? AvatarUrl, string? ProviderId)?> FetchGoogleTokenInfoAsync(string idToken)
+    {
+        try
+        {
+            using var http = new HttpClient();
+            var response = await http.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={idToken}");
+            if (!response.IsSuccessStatusCode) return null;
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
+            var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+            var picture = root.TryGetProperty("picture", out var pictureProp) ? pictureProp.GetString() : null;
+            var sub = root.TryGetProperty("sub", out var subProp) ? subProp.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(email)) return null;
+
+            return (email, name, picture, sub);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
