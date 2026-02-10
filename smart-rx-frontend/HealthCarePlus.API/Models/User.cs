@@ -30,6 +30,10 @@ public class User
     // Password Reset Fields
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
+
+    // Social Login Fields
+    public string? OAuthProvider { get; set; }
+    public string? OAuthProviderId { get; set; }
     
     // Avatar Information
     public string? AvatarColor { get; set; }
