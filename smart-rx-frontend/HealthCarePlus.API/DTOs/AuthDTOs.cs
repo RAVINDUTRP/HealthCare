@@ -2,6 +2,7 @@ namespace HealthCarePlus.API.DTOs;
 
 public record RegisterDto(string Username, string Email, string Password, string Role, string? Phone, DateTime? DateOfBirth);
 public record LoginDto(string UsernameOrEmail, string Password);
+public record SocialLoginDto(string? Email, string? FullName, string? ProviderId, string? AvatarUrl, string? IdToken);
 public record ForgotPasswordDto(string Email);
 public record ResetPasswordDto(string Email, string Token, string NewPassword);
 
