@@ -140,6 +140,11 @@ public class PatientService
         return prescription;
     }
 
+    public async Task<string?> CreatePatientAsync(Patient patient)
+    {
+        return await _patientRepository.CreateAsync(patient);
+    }
+
     public async Task<bool> CancelPrescriptionAsync(string userId, string prescriptionId)
     {
         var patient = await _patientRepository.GetByUserIdAsync(userId);

@@ -438,6 +438,27 @@ public class AuthController : ControllerBase
             var userId = await _userService.CreateAsync(user);
             if (userId == null)
                 return BadRequest("Failed to create user");
+
+            // Create a Patient record for social login users
+            var medicalRecordNumber = $"MRN-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
+            var patient = new Patient
+            {
+                UserId = userId,
+                MedicalRecordNumber = medicalRecordNumber,
+                BloodType = "Unknown",
+                Allergies = new List<string>(),
+                ChronicConditions = new List<string>(),
+                EmergencyContact = new EmergencyContact { Name = "", Phone = "", Relationship = "" },
+                InsuranceInfo = new InsuranceInfo { Provider = "", PolicyNumber = "", GroupNumber = "" },
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            var patientId = await _patientService.CreatePatientAsync(patient);
+            if (patientId == null)
+            {
+                Console.WriteLine($"Warning: Failed to create patient record for social login user {userId}");
+            }
         }
         else
         {
@@ -448,6 +469,31 @@ public class AuthController : ControllerBase
                 user.OAuthProviderId = providerId;
 
             await _userService.UpdateAsync(user.Id!, user);
+
+            // Ensure patient record exists for returning social login users
+            var existingPatient = await _patientService.GetPatientByUserIdAsync(user.Id!);
+            if (existingPatient == null)
+            {
+                var medicalRecordNumber = $"MRN-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
+                var patient = new Patient
+                {
+                    UserId = user.Id!,
+                    MedicalRecordNumber = medicalRecordNumber,
+                    BloodType = "Unknown",
+                    Allergies = new List<string>(),
+                    ChronicConditions = new List<string>(),
+                    EmergencyContact = new EmergencyContact { Name = "", Phone = "", Relationship = "" },
+                    InsuranceInfo = new InsuranceInfo { Provider = "", PolicyNumber = "", GroupNumber = "" },
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var patientId = await _patientService.CreatePatientAsync(patient);
+                if (patientId == null)
+                {
+                    Console.WriteLine($"Warning: Failed to create patient record for existing social login user {user.Id}");
+                }
+            }
         }
 
         var token = _jwtService.GenerateToken(user.Username, user.Role, user.Id);
