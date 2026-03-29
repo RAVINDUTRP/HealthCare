@@ -134,19 +134,7 @@ const PharmacyDashboard = () => {
   };
 
   const handleOpenWhatsAppChat = () => {
-    const message = encodeURIComponent('Hello, I need support regarding a prescription order.');
-
-    const configuredWhatsApp = (pharmacyInfo.whatsAppNumber || '').replace(/\D/g, '');
-
-    if (!configuredWhatsApp) {
-      window.open(`https://wa.me/?text=${message}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    const normalizedNumber =
-      configuredWhatsApp.startsWith('0') ? `94${configuredWhatsApp.slice(1)}` : configuredWhatsApp;
-
-    window.open(`https://wa.me/${normalizedNumber}?text=${message}`, '_blank', 'noopener,noreferrer');
+    window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
   };
 
   // Pharmacy data

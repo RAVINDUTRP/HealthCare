@@ -4,7 +4,7 @@ import {
   Heart, Activity, Pill, Calendar, FileText, Bell, Settings, LogOut, 
   UserCircle, Menu, X, Home, Clock, CheckCircle, Package, Phone,
   MapPin, Download, ChevronRight, AlertCircle, TrendingUp, Shield,
-  Search, Filter, MoreVertical, Plus, Upload
+  Search, Filter, MoreVertical, Plus, Upload, MessageCircle
 } from 'lucide-react';
 import Avatar from '../components/Avatar';
 import api from '../api/api';
@@ -76,6 +76,8 @@ const PatientDashboard = () => {
       imageData: rx?.imageData || rx?.ImageData || null,
       imageFileName: rx?.imageFileName || rx?.ImageFileName || null,
       pharmacyName: rx?.pharmacyName || rx?.PharmacyName || '',
+      pharmacyPhone: rx?.pharmacyPhone || rx?.PharmacyPhone || rx?.pharmacyContact || rx?.PharmacyContact || '',
+      whatsAppNumber: rx?.whatsAppNumber || rx?.WhatsAppNumber || rx?.pharmacyWhatsApp || rx?.PharmacyWhatsApp || rx?.pharmacyWhatsAppNumber || rx?.PharmacyWhatsAppNumber || '',
       notes: rx?.notes || rx?.Notes || '',
       medications,
       medication: rx?.medication || medications[0]?.drugName || 'Prescription',
@@ -89,6 +91,10 @@ const PatientDashboard = () => {
     const readyIds = getReadyPrescriptionIds();
     return (list || []).map((rx) => normalizePrescription(rx, readyIds))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  };
+
+  const openWhatsApp = () => {
+    window.open('https://wa.me/', '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {
@@ -819,9 +825,20 @@ const PatientDashboard = () => {
                       </div>
 
                       {rx.pharmacyName && (
-                        <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium mb-2">
-                          <MapPin className="w-4 h-4" />
-                          <span>{rx.pharmacyName}</span>
+                        <div className="flex items-center justify-between gap-3 text-sm text-emerald-700 font-medium mb-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <MapPin className="w-4 h-4" />
+                            <span className="truncate">{rx.pharmacyName}</span>
+                          </div>
+                          <button
+                            onClick={openWhatsApp}
+                            className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 hover:bg-green-200 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors"
+                            title={`Chat with ${rx.pharmacyName} on WhatsApp`}
+                            aria-label={`Chat with ${rx.pharmacyName} on WhatsApp`}
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            WhatsApp
+                          </button>
                         </div>
                       )}
 
