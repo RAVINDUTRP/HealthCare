@@ -1,16 +1,131 @@
-# React + Vite
+# 🏥 Smart Prescription Tracker (HealthCare+)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> 🚀 **SLT Company Internship Sample Project** by the **Smart Prescription Tracker Team**
 
-Currently, two official plugins are available:
+A full-stack healthcare web application designed to streamline digital prescription workflows among **Patients**, **Doctors**, **Pharmacists**, and **Admins**.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## ✨ Project Highlights
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 🔐 Role-based authentication (JWT)
+- 👨‍⚕️ Doctor prescription management
+- 💊 Pharmacist queue & fulfillment workflow
+- 🧑‍🦱 Patient prescription tracking dashboard
+- 🔔 Notification-ready architecture
+- 📦 MongoDB-backed API with clean service/repository structure
+- 🎨 Modern React UI with responsive dashboards
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🧰 Tech Stack
+
+### Frontend
+- ⚛️ React 19
+- ⚡ Vite 7
+- 🧭 React Router
+- 🎯 Axios
+- 🎨 Tailwind CSS
+- 🧩 Lucide Icons
+
+### Backend
+- 🟣 ASP.NET Core Web API (`net10.0`)
+- 🍃 MongoDB
+- 🔐 JWT Authentication
+- 🔒 BCrypt password hashing
+- 📘 Swagger (Development)
+
+---
+
+## 📁 Repository Structure
+
+```
+smart-rx-frontend/
+├── src/                     # React frontend
+├── public/
+├── HealthCarePlus.API/      # ASP.NET Core backend
+├── Healthcare_System_Architecture.md
+└── README.md
+```
+
+---
+
+## ✅ Prerequisites
+
+- Node.js **20.19+** (or 22.12+)
+- npm
+- .NET SDK **10.0**
+- MongoDB (local or remote)
+
+---
+
+## ⚙️ Setup & Run
+
+### 1) Clone repository
+
+```bash
+git clone <your-repo-url>
+cd smart-rx-frontend
+```
+
+### 2) Run Backend API
+
+```bash
+cd HealthCarePlus.API
+dotnet restore
+dotnet run
+```
+
+Backend default URL:
+- `http://localhost:5000`
+
+### 3) Run Frontend
+
+Open a new terminal:
+
+```bash
+cd smart-rx-frontend
+npm install
+npm run dev
+```
+
+Frontend default URL:
+- `http://localhost:5173`
+
+---
+
+## 👥 User Roles
+
+- 👨‍⚕️ **Doctor** – create & manage prescriptions
+- 💊 **Pharmacist** – process queue, mark ready, manage fulfillment
+- 🧑‍🦱 **Patient** – upload/view prescriptions, track status
+- 🛡️ **Admin** – monitor and manage system modules
+
+---
+
+## 📌 Notes
+
+- This project was built as an **internship sample project** under **SLT Company**.
+- It demonstrates practical full-stack architecture, role workflows, and modern UI/UX patterns.
+
+---
+
+## 🌱 Future Enhancements
+
+- 🤖 AI-driven medication validation
+- 📊 Advanced analytics dashboards
+- 📱 Improved communication modules (SMS / WhatsApp / push)
+- ☁️ Cloud deployment pipeline
+
+---
+
+## 🙌 Team
+
+**Smart Prescription Tracker Team**  
+Internship Project • SLT Company
+
+---
+
+## 📄 License
+
+This repository is for educational/internship demonstration purposes.
