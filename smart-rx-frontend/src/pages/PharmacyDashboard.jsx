@@ -4,6 +4,7 @@ import {
   Heart, Pill, Calendar, Bell, Settings, LogOut, UserCircle, Menu, X, Home, 
   Clock, CheckCircle, Package, Phone, ShoppingCart, DollarSign, AlertCircle,
   Search, Filter, Download, TrendingUp, BarChart3, MapPin, Mail, Plus, Eye,
+  MessageCircle,
   ChevronRight, Shield
 } from 'lucide-react';
 import Avatar from '../components/Avatar';
@@ -132,6 +133,22 @@ const PharmacyDashboard = () => {
     setTimeout(() => setFillSuccess(null), 3500);
   };
 
+  const handleOpenWhatsAppChat = () => {
+    const message = encodeURIComponent('Hello, I need support regarding a prescription order.');
+
+    const configuredWhatsApp = (pharmacyInfo.whatsAppNumber || '').replace(/\D/g, '');
+
+    if (!configuredWhatsApp) {
+      window.open(`https://wa.me/?text=${message}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const normalizedNumber =
+      configuredWhatsApp.startsWith('0') ? `94${configuredWhatsApp.slice(1)}` : configuredWhatsApp;
+
+    window.open(`https://wa.me/${normalizedNumber}?text=${message}`, '_blank', 'noopener,noreferrer');
+  };
+
   // Pharmacy data
   const pharmacyInfo = {
     name: user?.username || 'MediCare Pharmacy',
@@ -139,6 +156,7 @@ const PharmacyDashboard = () => {
     email: user?.email || 'orders@medicare.com',
     id: 'PHR-023',
     phone: '(555) 123-4567',
+    whatsAppNumber: import.meta.env.VITE_PHARMACY_WHATSAPP || '',
     address: '123 Main Street, Downtown',
     avatar: user?.username ? user.username.substring(0, 2).toUpperCase() : 'MP',
     license: 'PH-98765'
@@ -328,7 +346,10 @@ const PharmacyDashboard = () => {
             <Package className="w-8 h-8 text-cyan-100 mb-3 relative z-10" />
             <h4 className="font-bold text-white mb-1 relative z-10">Need Support?</h4>
             <p className="text-xs text-cyan-100 mb-3 relative z-10 opacity-90">Contact pharmacy support</p>
-            <button className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white py-2.5 rounded-xl text-xs font-bold transition-colors relative z-10 border border-white/20">
+            <button
+              onClick={handleOpenWhatsAppChat}
+              className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white py-2.5 rounded-xl text-xs font-bold transition-colors relative z-10 border border-white/20"
+            >
               Get Help
             </button>
           </div>
@@ -1326,6 +1347,13 @@ const PharmacyDashboard = () => {
       </div>
       <h3 className="text-xl font-bold text-gray-600">Doctor Messages</h3>
       <p className="text-sm mt-2">This section is under development.</p>
+      <button
+        onClick={handleOpenWhatsAppChat}
+        className="mt-6 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-green-200 transition-all flex items-center gap-2"
+      >
+        <MessageCircle className="w-4 h-4" />
+        Open WhatsApp Chat
+      </button>
     </div>
   );
 
@@ -1362,6 +1390,16 @@ const PharmacyDashboard = () => {
           {selectedTab === 'history' && <HistoryView />}
           {selectedTab === 'settings' && <SettingsView />}
         </main>
+
+        <button
+          onClick={handleOpenWhatsAppChat}
+          className="fixed bottom-6 right-6 z-40 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-full shadow-xl shadow-green-200 transition-all flex items-center gap-2"
+          aria-label="Open WhatsApp chat"
+          title="Open WhatsApp chat"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span className="hidden sm:inline text-sm font-bold">WhatsApp</span>
+        </button>
       </div>
     </div>
   );
