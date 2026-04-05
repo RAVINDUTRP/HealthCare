@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, User, Mail, Lock, Phone, Calendar, MapPin, Building, FileText, Stethoscope, Pill } from 'lucide-react';
 import { register, registerDoctor, registerPharmacist, registerPatient } from '../api/api';
 
@@ -8,6 +8,7 @@ const RegistrationForm = ({ role, onBack, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [googleReady, setGoogleReady] = useState(false);
+  const googleFallbackRef = useRef(null);
 
   const roleConfig = {
     patient: {
@@ -84,6 +85,19 @@ const RegistrationForm = ({ role, onBack, onSuccess }) => {
   };
 
   useEffect(() => {
+    const renderGoogleFallbackButton = () => {
+      if (!googleFallbackRef.current || !window.google?.accounts?.id) return;
+
+      googleFallbackRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(googleFallbackRef.current, {
+        theme: 'outline',
+        size: 'large',
+        shape: 'pill',
+        text: 'continue_with',
+        width: 260
+      });
+    };
+
     const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
     const initGoogle = () => {
       if (!window.google?.accounts?.id) return;
@@ -107,9 +121,12 @@ const RegistrationForm = ({ role, onBack, onSuccess }) => {
           }));
         },
         auto_select: false,
-        cancel_on_tap_outside: true
+        cancel_on_tap_outside: true,
+        itp_support: true,
+        use_fedcm_for_prompt: true
       });
       setGoogleReady(true);
+      renderGoogleFallbackButton();
     };
 
     if (existingScript) {
@@ -123,6 +140,10 @@ const RegistrationForm = ({ role, onBack, onSuccess }) => {
     script.defer = true;
     script.onload = initGoogle;
     document.body.appendChild(script);
+
+    return () => {
+      setGoogleReady(false);
+    };
   }, []);
 
   const handleChange = (name, value) => {
@@ -332,23 +353,7 @@ const RegistrationForm = ({ role, onBack, onSuccess }) => {
               <div className="h-px bg-gray-200 flex-1" />
             </div>
             <div className="mt-5 flex flex-col items-center gap-3">
-              <button
-                type="button"
-                onClick={() => googleReady && window.google?.accounts?.id?.prompt()}
-                disabled={!googleReady || isLoading}
-                aria-label="Use Google to prefill"
-                className="group w-full sm:w-auto rounded-2xl border border-gray-200 bg-white px-6 py-3 flex items-center justify-center gap-3 shadow-md hover:shadow-lg hover:border-gray-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-white border border-gray-200">
-                  <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.36 1.54 8.29 3.29l6.1-6.1C34.73 3.2 29.77 1 24 1 14.62 1 6.54 6.38 2.7 14.6l7.2 5.59C11.77 13.09 17.44 9.5 24 9.5z" />
-                    <path fill="#34A853" d="M46.5 24.5c0-1.7-.15-3.32-.43-4.9H24v9.3h12.7c-.55 2.96-2.23 5.47-4.73 7.17l7.27 5.62C43.86 37.1 46.5 31.3 46.5 24.5z" />
-                    <path fill="#FBBC05" d="M9.9 28.2c-.5-1.48-.78-3.05-.78-4.7s.28-3.22.78-4.7l-7.2-5.59C1.63 15.9 1 19.64 1 23.5s.63 7.6 1.7 10.79l7.2-5.59z" />
-                    <path fill="#4285F4" d="M24 46c6.48 0 11.93-2.14 15.9-5.81l-7.27-5.62c-2.02 1.36-4.6 2.18-8.63 2.18-6.56 0-12.23-3.59-14.1-8.69l-7.2 5.59C6.54 41.62 14.62 46 24 46z" />
-                  </svg>
-                </span>
-                <span className="text-sm font-semibold text-gray-700 group-hover:text-gray-900">Use Google to prefill</span>
-              </button>
+              <div ref={googleFallbackRef} className={googleReady ? 'block' : 'hidden'} />
               <p className="text-center text-xs text-gray-500 max-w-sm">We only prefill your name and email. Complete the remaining details to finish registration.</p>
             </div>
           </div>

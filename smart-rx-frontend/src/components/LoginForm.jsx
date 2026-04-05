@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, User, Lock } from 'lucide-react';
 import { login, loginFacebook, loginGoogle, loginAppleId } from '../api/api';
 
@@ -11,6 +11,8 @@ const LoginForm = ({ onBack, onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [googleReady, setGoogleReady] = useState(false);
+  const [showGoogleFallback, setShowGoogleFallback] = useState(false);
+  const googleFallbackRef = useRef(null);
 
   const decodeJwtPayload = (token) => {
     try {
@@ -26,45 +28,22 @@ const LoginForm = ({ onBack, onSuccess }) => {
   };
 
   useEffect(() => {
-    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-    if (existingScript) {
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.initialize({
-          client_id: '576024480859-t60g54pu3i72q7s01gn91qorccp0v2cf.apps.googleusercontent.com',
-          callback: async (response) => {
-            if (!response?.credential) return;
-            setIsLoading(true);
-            try {
-              const payload = decodeJwtPayload(response.credential) || {};
-              const apiResponse = await loginGoogle({
-                idToken: response.credential,
-                email: payload.email,
-                fullName: payload.name,
-                avatarUrl: payload.picture,
-                providerId: payload.sub
-              });
-              onSuccess({ response: apiResponse.data });
-            } catch (error) {
-              console.error('Google login error:', error);
-              setErrors({ submit: error.response?.data || 'Google login failed. Please try again.' });
-            } finally {
-              setIsLoading(false);
-            }
-          },
-          auto_select: false,
-          cancel_on_tap_outside: true
-        });
-        setGoogleReady(true);
-      }
-      return;
-    }
+    const renderGoogleFallbackButton = () => {
+      if (!googleFallbackRef.current || !window.google?.accounts?.id) return;
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
+      googleFallbackRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(googleFallbackRef.current, {
+        theme: 'outline',
+        size: 'large',
+        shape: 'pill',
+        text: 'continue_with',
+        width: 260
+      });
+    };
+
+    const initGoogle = () => {
       if (!window.google?.accounts?.id) return;
+
       window.google.accounts.id.initialize({
         client_id: '576024480859-t60g54pu3i72q7s01gn91qorccp0v2cf.apps.googleusercontent.com',
         callback: async (response) => {
@@ -88,11 +67,31 @@ const LoginForm = ({ onBack, onSuccess }) => {
           }
         },
         auto_select: false,
-        cancel_on_tap_outside: true
+        cancel_on_tap_outside: true,
+        itp_support: true,
+        use_fedcm_for_prompt: true
       });
+
       setGoogleReady(true);
+      renderGoogleFallbackButton();
     };
+
+    const existingScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existingScript) {
+      initGoogle();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogle;
     document.body.appendChild(script);
+
+    return () => {
+      setGoogleReady(false);
+    };
   }, [onSuccess]);
 
   const handleChange = (name, value) => {
@@ -170,7 +169,22 @@ const LoginForm = ({ onBack, onSuccess }) => {
         setErrors({ submit: 'Google login is not ready yet. Please try again.' });
         return;
       }
-      window.google.accounts.id.prompt();
+
+      setErrors((prev) => ({ ...prev, submit: '' }));
+      setShowGoogleFallback(false);
+
+      window.google.accounts.id.prompt((notification) => {
+        if (!notification) return;
+
+        const notDisplayed = typeof notification.isNotDisplayed === 'function' && notification.isNotDisplayed();
+        const skipped = typeof notification.isSkippedMoment === 'function' && notification.isSkippedMoment();
+
+        if (notDisplayed || skipped) {
+          setShowGoogleFallback(true);
+          setErrors({ submit: 'Popup was blocked or not shown. Use the Google fallback button below.' });
+        }
+      });
+
       return;
     }
 
@@ -368,6 +382,12 @@ const LoginForm = ({ onBack, onSuccess }) => {
               </button>
             </div>
             <p className="mt-4 text-center text-xs text-gray-500">Quick, secure sign-in with your preferred provider.</p>
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <div ref={googleFallbackRef} className={showGoogleFallback ? 'block' : 'hidden'} />
+              {showGoogleFallback && (
+                <p className="text-xs text-amber-700 text-center">If Safari/Chrome blocks One Tap, use this fallback button.</p>
+              )}
+            </div>
           </div>
 
           <div className="mt-6 text-center">
